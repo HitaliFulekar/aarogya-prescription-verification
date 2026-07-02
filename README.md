@@ -1,5 +1,7 @@
 # Aarogya: ML-Based Blood Request Form Verification System
 
+![Application Screenshot](screenshot.png)
+
 An AI-powered document verification system that automatically validates uploaded blood request forms using OCR and Machine Learning.
 
 ---
