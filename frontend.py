@@ -1,23 +1,32 @@
 import streamlit as st
 import pickle
-import fitz  # PyMuPDF
+import fitz
 import tempfile
 import re
 
-from PIL import Image
 from ocr_utils import extract_text
 from scipy.sparse import hstack
 
-# -----------------------------
-# LOAD MODEL + VECTORIZER
-# -----------------------------
+# ------------------------------------
+# PAGE CONFIG
+# ------------------------------------
+
+st.set_page_config(
+    page_title="Aarogya - Blood Request Verification",
+    page_icon="🩸",
+    layout="centered"
+)
+
+# ------------------------------------
+# LOAD MODEL
+# ------------------------------------
 
 model = pickle.load(open("models/model.pkl", "rb"))
 vectorizer = pickle.load(open("models/vectorizer.pkl", "rb"))
 
-# -----------------------------
-# BLOOD RULES
-# -----------------------------
+# ------------------------------------
+# BLOOD KEYWORDS
+# ------------------------------------
 
 blood_keywords = [
     "blood requisition",
@@ -41,6 +50,10 @@ blood_keywords = [
     "blood bank use only"
 ]
 
+# ------------------------------------
+# RULE SCORE
+# ------------------------------------
+
 def add_rule_score(text):
 
     score = 0
@@ -52,9 +65,9 @@ def add_rule_score(text):
 
     return score
 
-# -----------------------------
+# ------------------------------------
 # CLEAN TEXT
-# -----------------------------
+# ------------------------------------
 
 def clean_text(text):
 
@@ -66,98 +79,142 @@ def clean_text(text):
 
     return text
 
-# -----------------------------
-# STREAMLIT UI
-# -----------------------------
+# ------------------------------------
+# SIDEBAR
+# ------------------------------------
 
-st.title("Blood Request Form Verification System")
+with st.sidebar:
+
+    st.title("🩸 Aarogya")
+
+    st.markdown("### ML-Based Prescription Verification")
+
+    st.write(
+        """
+This application verifies uploaded blood request forms using:
+
+-> EasyOCR
+
+-> TF-IDF Feature Extraction
+
+-> Linear SVM Classifier
+
+-> Rule-Based Validation
+"""
+    )
+
+    st.divider()
+
+    st.write("Developed by")
+
+    st.write("**Hitali Fulekar**")
+
+    st.write("NIT Jalandhar")
+
+# ------------------------------------
+# TITLE
+# ------------------------------------
+
+st.title("🩸 Blood Request Form Verification")
+
+st.write(
+    """
+Upload a **Blood Request Form** in **Image** or **PDF** format.
+
+The system automatically extracts text using OCR and predicts whether the uploaded document is a **Valid Blood Request Form** or an **Invalid Document**.
+"""
+)
 
 uploaded_file = st.file_uploader(
     "Upload Image or PDF",
     type=["png", "jpg", "jpeg", "pdf"]
 )
 
+# ------------------------------------
+# PROCESS FILE
+# ------------------------------------
+
 if uploaded_file is not None:
 
-    file_type = uploaded_file.type
+    with st.spinner("Processing document..."):
 
-    extracted_text = ""
+        file_type = uploaded_file.type
 
-    # -----------------------------
-    # IMAGE FILE
-    # -----------------------------
+        extracted_text = ""
 
-    if "image" in file_type:
+        # IMAGE
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+        if "image" in file_type:
 
-            tmp.write(uploaded_file.read())
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
 
-            image_path = tmp.name
+                tmp.write(uploaded_file.read())
 
-        extracted_text = extract_text(image_path)
+                image_path = tmp.name
 
-        st.image(image_path, caption="Uploaded Image")
+            st.image(
+                image_path,
+                caption="Uploaded Image",
+                use_container_width=True
+            )
 
-    # -----------------------------
-    # PDF FILE
-    # -----------------------------
+            extracted_text = extract_text(image_path)
 
-    elif "pdf" in file_type:
+        # PDF
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        elif "pdf" in file_type:
 
-            tmp.write(uploaded_file.read())
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
 
-            pdf_path = tmp.name
+                tmp.write(uploaded_file.read())
 
-        pdf_document = fitz.open(pdf_path)
+                pdf_path = tmp.name
 
-        for page in pdf_document:
+            pdf_document = fitz.open(pdf_path)
 
-            pix = page.get_pixmap()
+            for page in pdf_document:
 
-            image_path = "temp_page.png"
+                pix = page.get_pixmap()
 
-            pix.save(image_path)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_img:
 
-            extracted_text += extract_text(image_path)
+                    image_path = temp_img.name
 
-    # -----------------------------
-    # TEXT PROCESSING
-    # -----------------------------
+                pix.save(image_path)
 
-    cleaned_text = clean_text(extracted_text)
+                extracted_text += extract_text(image_path)
 
-    rule_score = add_rule_score(cleaned_text)
+        # ------------------------------------
+        # ML Prediction
+        # ------------------------------------
 
-    X_text = vectorizer.transform([cleaned_text])
+        cleaned_text = clean_text(extracted_text)
 
-    X = hstack([
-        X_text,
-        [[rule_score]]
-    ])
+        rule_score = add_rule_score(cleaned_text)
 
-    prediction = model.predict(X)[0]
+        X_text = vectorizer.transform([cleaned_text])
 
-    # -----------------------------
-    # OUTPUT
-    # -----------------------------
+        X = hstack([
+            X_text,
+            [[rule_score]]
+        ])
+
+        prediction = model.predict(X)[0]
+
+    st.divider()
 
     st.subheader("Prediction Result")
 
     if prediction == "valid":
 
-        st.success("VALID BLOOD REQUEST FORM")
+        st.success("✅ VALID BLOOD REQUEST FORM")
 
     else:
 
-        st.error("INVALID DOCUMENT")
+        st.error("❌ INVALID DOCUMENT")
 
-    # -----------------------------
-    # OCR TEXT
-    # -----------------------------
+    st.divider()
 
-    st.subheader("Extracted OCR Text")
+    with st.expander("📄 View Extracted OCR Text"):
 
-    st.write(extracted_text)
+        st.write(extracted_text)
