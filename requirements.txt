@@ -1,0 +1,10 @@
+easyocr
+streamlit
+pymupdf
+pillow
+scikit-learn
+scipy
+pandas
+torch
+torchvision
+opencv-python
